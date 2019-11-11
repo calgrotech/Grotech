@@ -56,19 +56,27 @@ class ArdString:
 
 get_save_place = lambda: os.path.join(save_folder, "temperature_dump{0}.yaml".format(time_file_name()))
 
-#Loop through sensor data (from -1 since the first packet is usually invalid)
-for s in count(-1):
-    input_arduino = ser.readline() #Read Serial line
-    ard_obj = ArdString(input_arduino, num_data)
 
-    with open(get_save_place(), "a+") as yaml_file:
+def generate_sensor_in():
+    for s in count(0):
+        input_arduino = ser.readline() #Read Serial line
+        ard_obj = ArdString(input_arduino, num_data)
         if not ard_obj.is_valid_pack:
             continue
-        print(ard_obj.time_dict)
-        time_yaml = yaml.dump(ard_obj.time_dict, indent = 4)
-        yaml_file.write(time_yaml + "\n\n")
+        yield ard_obj.time_dict
+    
 
-    if s % save_delta == 0:
-        call(["rclone", "copy", save_folder, "grotech:"])
+def main():
+    for s, reading in enumerate(generate_sensor_in()):
+        with open(get_save_place(), "a+") as yaml_file:
+            time_yaml = yaml.dump(reading, indent = 4)
+            yaml_file.write(time_yaml + "\n\n")
+            print(reading)
 
-    sleep(sleep_sec)
+        if s % save_delta == 0:
+            call(["rclone", "copy", save_folder, "grotech:"])
+
+        sleep(sleep_sec)
+
+if __name__ == "__main__":
+    main()
