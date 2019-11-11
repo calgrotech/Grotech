@@ -6,6 +6,7 @@ from time import sleep
 from datetime import datetime
 from subprocess import call
 from itertools import count
+from numpy import log
 
 # may add argparse
 ## required
@@ -46,7 +47,7 @@ class ArdString:
         if not self.has_start_end:
             return []
         between_chars = self.ard_string.split(self.start_char)[1].split(self.end_char)[0]
-        return [int(s) for s in re.findall("\\d+", between_chars)]
+        return [convert_to_temp(int(s)) for s in re.findall("\\d+", between_chars)]
 
     @property
     def time_dict(self):
@@ -56,10 +57,11 @@ class ArdString:
 
 get_save_place = lambda: os.path.join(save_folder, "temperature_dump{0}.yaml".format(time_file_name()))
 
+convert_to_temp = lambda measurement: '%.3f'%(1 / (1/298.15 + 1/3950 * log(1023/measurement - 1)) - 273.15)
 
 def generate_sensor_in():
     for s in count(0):
-        input_arduino = ser.readline() #Read Serial line
+        input_arduino = ser.readline()
         ard_obj = ArdString(input_arduino, num_data)
         if not ard_obj.is_valid_pack:
             continue
