@@ -6,6 +6,7 @@ from time import sleep
 from datetime import datetime
 from subprocess import call
 from itertools import count
+from numpy import log
 
 # may add argparse
 ## required
@@ -13,11 +14,11 @@ num_data = 3
 ## optional
 sleep_sec = 60
 baudrate = 115200
-serial_port = path.join(os.sep, 'dev'. 'ttyACM0')
+serial_port = os.path.join(os.sep, 'dev', 'ttyACM0')
 save_delta = 5
 
-time_file_name = datetime.now().strftime('-%d-%m-%Y')
-save_folder = os.path.join(os.getcwd(), "data")
+time_file_name = lambda: datetime.now().strftime('-%d-%m-%Y')
+save_folder = os.path.join(os.path.dirname(os.getcwd()), "data")
 
 ser = Serial(serial_port, baudrate)
 
@@ -46,7 +47,7 @@ class ArdString:
         if not self.has_start_end:
             return []
         between_chars = self.ard_string.split(self.start_char)[1].split(self.end_char)[0]
-        return [int(s) for s in re.findall("\\d+", between_chars)]
+        return [convert_to_temp(int(s)) for s in re.findall("\\d+", between_chars)]
 
     @property
     def time_dict(self):
@@ -54,21 +55,30 @@ class ArdString:
         return {datetime.now().strftime('%m/%d/%Y/%H:%M:%S'): data_dict}
 
 
-get_save_place = lambda: os.path.join(save_folder, "temperature_dump{0}.yaml".format(time_file_name))
+get_save_place = lambda: os.path.join(save_folder, "temperature_dump{0}.yaml".format(time_file_name()))
 
-#Loop through sensor data
-for s in count(0):
-    input_arduino = ser.readline() #Read Serial line
-    ard_obj = ArdString(input_arduino)
+convert_to_temp = lambda measurement: '%.3f'%(1 / (1/298.15 + 1/3950 * log(1023/measurement - 1)) - 273.15)
 
-    with open(get_save_place(), "a+") as yaml_file:
+def generate_sensor_in():
+    for s in count(0):
+        input_arduino = ser.readline()
+        ard_obj = ArdString(input_arduino, num_data)
         if not ard_obj.is_valid_pack:
             continue
-        print(ard_obj.time_dict)
-        time_yaml = yaml.dumps(ard_obj.time_dict, indent = 4)
-        yaml_file.write(time_yaml + "\n\n")
+        yield ard_obj.time_dict
+    
 
-    if s % save_delta == 0:
-        call(["rclone", "copy", save_folder, "grotech:"])
+def main():
+    for s, reading in enumerate(generate_sensor_in()):
+        with open(get_save_place(), "a+") as yaml_file:
+            time_yaml = yaml.dump(reading, indent = 4)
+            yaml_file.write(time_yaml + "\n\n")
+            print(reading)
 
-    sleep(sleep_sec)
+        if s % save_delta == 0:
+            call(["rclone", "copy", save_folder, "grotech:"])
+
+        sleep(sleep_sec)
+
+if __name__ == "__main__":
+    main()
